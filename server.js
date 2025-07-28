@@ -2,7 +2,8 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
-import job from "./config/cron.js";
+const job = require('./config/cron');
+
 
 // Import database connection
 const { connectDB } = require('./config/database');
@@ -15,7 +16,7 @@ const alertRoutes = require('./routes/alerts');
 // Initialize express app
 const app = express();
 
-if (ENV.NODE_ENV === "production") job.start();
+if (process.env.NODE_ENV === "production") job.start();
 
 // Middleware
 app.use(helmet());
