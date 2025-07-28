@@ -32,7 +32,11 @@ const authenticateToken = (req, res, next) => {
 const createAlertValidation = [
   body('type').isIn(['emergency', 'help', 'check-in']).withMessage('Alert type must be emergency, help, or check-in'),
   body('message').optional().trim().isLength({ max: 500 }).withMessage('Message must be less than 500 characters'),
-  body('location').optional().trim().isLength({ max: 200 }).withMessage('Location must be less than 200 characters')
+  body('location').optional().trim().isLength({ max: 200 }).withMessage('Location must be less than 200 characters'),
+  body('latitude').optional().isFloat({ min: -90, max: 90 }).withMessage('Latitude must be a valid number between -90 and 90'),
+  body('longitude').optional().isFloat({ min: -180, max: 180 }).withMessage('Longitude must be a valid number between -180 and 180'),
+  body('accuracy').optional().isFloat({ min: 0 }).withMessage('Accuracy must be a positive number'),
+  body('address').optional().trim().isLength({ max: 500 }).withMessage('Address must be less than 500 characters')
 ];
 
 // In-memory storage for alerts (in production, use database)
@@ -51,7 +55,7 @@ router.post('/create', authenticateToken, createAlertValidation, async (req, res
       });
     }
 
-    const { type, message, location } = req.body;
+    const { type, message, location, latitude, longitude, accuracy, address } = req.body;
     const currentUser = await User.findById(req.userId);
     
     if (!currentUser) {
@@ -79,6 +83,10 @@ router.post('/create', authenticateToken, createAlertValidation, async (req, res
       type,
       message: message || '',
       location: location || '',
+      latitude: latitude || null,
+      longitude: longitude || null,
+      accuracy: accuracy || null,
+      address: address || null,
       status: 'active',
       createdAt: new Date().toISOString(),
       acknowledgedAt: null,
