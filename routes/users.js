@@ -327,7 +327,9 @@ router.get('/paired-user', authenticateToken, async (req, res) => {
           id: pairedUser.id,
           name: pairedUser.name,
           role: pairedUser.role,
-          lastLogin: pairedUser.lastLogin
+          lastLogin: pairedUser.lastLogin,
+          lastSeen: pairedUser.lastSeen,
+          createdAt: pairedUser.createdAt
         }
       }
     });
@@ -370,6 +372,46 @@ router.get('/all', authenticateToken, async (req, res) => {
     });
   } catch (error) {
     console.error('Get all users error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error'
+    });
+  }
+});
+
+// PUT /api/users/last-seen - Update user's last seen time
+router.put('/last-seen', authenticateToken, async (req, res) => {
+  try {
+    const user = await User.findById(req.userId);
+    
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    // Update last seen time
+    const updatedUser = await User.update(req.userId, {
+      lastSeen: new Date().toISOString()
+    });
+
+    if (!updatedUser) {
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to update last seen time'
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Last seen time updated successfully',
+      data: {
+        lastSeen: updatedUser.lastSeen
+      }
+    });
+  } catch (error) {
+    console.error('Update last seen error:', error);
     res.status(500).json({
       success: false,
       message: 'Internal server error'
