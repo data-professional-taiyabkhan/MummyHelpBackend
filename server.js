@@ -12,6 +12,8 @@ const { connectDB } = require('./config/database');
 const authRoutes = require('./routes/auth');
 const userRoutes = require('./routes/users');
 const alertRoutes = require('./routes/alerts');
+const deviceTokenRoutes = require('./routes/device-tokens');
+const locationRoutes = require('./routes/locations');
 
 // Initialize express app
 const app = express();
@@ -41,6 +43,8 @@ app.get('/health', (req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/alerts', alertRoutes);
+app.use('/api/device-tokens', deviceTokenRoutes);
+app.use('/api/locations', locationRoutes);
 
 // 404 handler
 app.use('*', (req, res) => {

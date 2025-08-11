@@ -2,6 +2,9 @@ const express = require('express');
 const { body, validationResult } = require('express-validator');
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
+const Alert = require('../models/Alert');
+const Location = require('../models/Location');
+const pushService = require('../services/push');
 
 const router = express.Router();
 
@@ -39,9 +42,7 @@ const createAlertValidation = [
   body('address').optional().trim().isLength({ max: 500 }).withMessage('Address must be less than 500 characters')
 ];
 
-// In-memory storage for alerts (in production, use database)
-const alerts = new Map();
-let alertIdCounter = 1;
+// Database storage for alerts (replaced in-memory storage)
 
 // POST /api/alerts/create - Create a new emergency alert
 router.post('/create', authenticateToken, createAlertValidation, async (req, res) => {
@@ -73,13 +74,9 @@ router.post('/create', authenticateToken, createAlertValidation, async (req, res
       });
     }
 
-    // Create alert
-    const alertId = alertIdCounter++;
-    const alert = {
-      id: alertId,
+    // Create alert in database
+    const alertData = {
       userId: currentUser.id,
-      userName: currentUser.name,
-      userRole: currentUser.role,
       type,
       message: message || '',
       location: location || '',
@@ -87,23 +84,52 @@ router.post('/create', authenticateToken, createAlertValidation, async (req, res
       longitude: longitude || null,
       accuracy: accuracy || null,
       address: address || null,
-      status: 'active',
-      createdAt: new Date().toISOString(),
-      acknowledgedAt: null,
-      acknowledgedBy: null
+      status: 'active'
     };
 
-    alerts.set(alertId, alert);
+    const alert = await Alert.create(alertData);
 
     // Get paired user info
     const pairedUser = await User.findById(currentUser.pairedWith);
+
+    // Send push notification to parent
+    if (pairedUser) {
+      try {
+        await pushService.notifyParentOnAlert(alert.id, currentUser.id);
+        console.log(`Push notification sent to parent ${pairedUser.id} for alert ${alert.id}`);
+      } catch (pushError) {
+        console.error('Failed to send push notification:', pushError);
+        // Don't fail the alert creation if push fails
+      }
+    }
+
+    // If location data provided, create initial location entry
+    if (latitude && longitude) {
+      try {
+        await Location.create({
+          userId: currentUser.id,
+          alertId: alert.id,
+          latitude,
+          longitude,
+          accuracy,
+          heading: null,
+          speed: null,
+          altitude: null,
+          address
+        });
+        console.log(`Initial location recorded for alert ${alert.id}`);
+      } catch (locationError) {
+        console.error('Failed to record initial location:', locationError);
+        // Don't fail the alert creation if location recording fails
+      }
+    }
 
     res.status(201).json({
       success: true,
       message: 'Alert created successfully',
       data: {
         alert: {
-          ...alert,
+          ...alert.toJSON(),
           pairedUser: pairedUser ? {
             id: pairedUser.id,
             name: pairedUser.name,
@@ -134,10 +160,8 @@ router.get('/my-alerts', authenticateToken, async (req, res) => {
       });
     }
 
-    // Get user's alerts
-    const userAlerts = Array.from(alerts.values())
-      .filter(alert => alert.userId === currentUser.id)
-      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    // Get user's alerts from database
+    const userAlerts = await Alert.findByUserId(currentUser.id);
 
     res.json({
       success: true,
@@ -173,10 +197,8 @@ router.get('/paired-alerts', authenticateToken, async (req, res) => {
       });
     }
 
-    // Get alerts from paired user
-    const pairedAlerts = Array.from(alerts.values())
-      .filter(alert => alert.userId === currentUser.pairedWith)
-      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    // Get alerts from paired user from database
+    const pairedAlerts = await Alert.findByPairedUserId(currentUser.pairedWith);
 
     res.json({
       success: true,
@@ -196,7 +218,7 @@ router.get('/paired-alerts', authenticateToken, async (req, res) => {
 // PUT /api/alerts/:alertId/acknowledge - Acknowledge an alert
 router.put('/:alertId/acknowledge', authenticateToken, async (req, res) => {
   try {
-    const alertId = parseInt(req.params.alertId);
+    const alertId = req.params.alertId;
     const currentUser = await User.findById(req.userId);
     
     if (!currentUser) {
@@ -206,7 +228,7 @@ router.put('/:alertId/acknowledge', authenticateToken, async (req, res) => {
       });
     }
 
-    const alert = alerts.get(alertId);
+    const alert = await Alert.findById(alertId);
     if (!alert) {
       return res.status(404).json({
         success: false,
@@ -222,18 +244,14 @@ router.put('/:alertId/acknowledge', authenticateToken, async (req, res) => {
       });
     }
 
-    // Update alert status
-    alert.status = 'acknowledged';
-    alert.acknowledgedAt = new Date().toISOString();
-    alert.acknowledgedBy = currentUser.id;
-
-    alerts.set(alertId, alert);
+    // Update alert status in database
+    const updatedAlert = await alert.acknowledge(currentUser.id);
 
     res.json({
       success: true,
       message: 'Alert acknowledged successfully',
       data: {
-        alert
+        alert: updatedAlert.toJSON()
       }
     });
   } catch (error) {
@@ -248,7 +266,7 @@ router.put('/:alertId/acknowledge', authenticateToken, async (req, res) => {
 // DELETE /api/alerts/:alertId - Delete an alert
 router.delete('/:alertId', authenticateToken, async (req, res) => {
   try {
-    const alertId = parseInt(req.params.alertId);
+    const alertId = req.params.alertId;
     const currentUser = await User.findById(req.userId);
     
     if (!currentUser) {
@@ -258,7 +276,7 @@ router.delete('/:alertId', authenticateToken, async (req, res) => {
       });
     }
 
-    const alert = alerts.get(alertId);
+    const alert = await Alert.findById(alertId);
     if (!alert) {
       return res.status(404).json({
         success: false,
@@ -274,7 +292,8 @@ router.delete('/:alertId', authenticateToken, async (req, res) => {
       });
     }
 
-    alerts.delete(alertId);
+    // Delete alert from database
+    await alert.delete();
 
     res.json({
       success: true,
@@ -301,10 +320,8 @@ router.get('/active', authenticateToken, async (req, res) => {
       });
     }
 
-    // Get all active alerts
-    const activeAlerts = Array.from(alerts.values())
-      .filter(alert => alert.status === 'active')
-      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    // Get all active alerts from database
+    const activeAlerts = await Alert.findActive();
 
     res.json({
       success: true,
@@ -314,6 +331,54 @@ router.get('/active', authenticateToken, async (req, res) => {
     });
   } catch (error) {
     console.error('Get active alerts error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error'
+    });
+  }
+});
+
+// PUT /api/alerts/:alertId/cancel - Cancel an alert
+router.put('/:alertId/cancel', authenticateToken, async (req, res) => {
+  try {
+    const alertId = req.params.alertId;
+    const currentUser = await User.findById(req.userId);
+    
+    if (!currentUser) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    const alert = await Alert.findById(alertId);
+    if (!alert) {
+      return res.status(404).json({
+        success: false,
+        message: 'Alert not found'
+      });
+    }
+
+    // Check if user owns the alert
+    if (alert.userId !== currentUser.id) {
+      return res.status(403).json({
+        success: false,
+        message: 'You can only cancel your own alerts'
+      });
+    }
+
+    // Cancel alert in database
+    const cancelledAlert = await alert.cancel();
+
+    res.json({
+      success: true,
+      message: 'Alert cancelled successfully',
+      data: {
+        alert: cancelledAlert.toJSON()
+      }
+    });
+  } catch (error) {
+    console.error('Cancel alert error:', error);
     res.status(500).json({
       success: false,
       message: 'Internal server error'
