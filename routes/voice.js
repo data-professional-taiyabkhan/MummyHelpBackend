@@ -5,7 +5,7 @@
 const express = require('express');
 const multer = require('multer');
 const { body, validationResult } = require('express-validator');
-const { authenticateToken } = require('../middleware/auth');
+const { auth } = require('../middleware/auth');
 const { supabase } = require('../config/database');
 const { voiceClient } = require('../lib/voice/pythonClient');
 const { cosineSimilarity, averageEmbeddings, validateEmbedding, estimateSNR } = require('../lib/voice/cosine');
@@ -33,9 +33,11 @@ const upload = multer({
  * POST /api/voice/enroll
  * Enroll a child's voice by processing 5 audio samples
  */
-router.post('/enroll', authenticateToken, upload.array('samples', 5), [
+router.post('/enroll', 
+  auth, 
+  upload.array('samples', 5),
   body('deviceId').optional().isString().trim(),
-], async (req, res) => {
+  async (req, res) => {
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
@@ -236,9 +238,11 @@ router.post('/enroll', authenticateToken, upload.array('samples', 5), [
  * POST /api/voice/verify
  * Verify a voice sample against enrolled voiceprint
  */
-router.post('/verify', authenticateToken, upload.single('audio'), [
+router.post('/verify', 
+  auth, 
+  upload.single('audio'),
   body('deviceId').optional().isString().trim(),
-], async (req, res) => {
+  async (req, res) => {
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
@@ -397,7 +401,7 @@ router.post('/verify', authenticateToken, upload.single('audio'), [
  * GET /api/voice/status
  * Get voice enrollment status for the current user
  */
-router.get('/status', authenticateToken, async (req, res) => {
+router.get('/status', auth, async (req, res) => {
   try {
     const userId = req.user.userId;
 
@@ -437,7 +441,7 @@ router.get('/status', authenticateToken, async (req, res) => {
  * DELETE /api/voice/enrollment
  * Remove voice enrollment for the current user
  */
-router.delete('/enrollment', authenticateToken, async (req, res) => {
+router.delete('/enrollment', auth, async (req, res) => {
   try {
     const userId = req.user.userId;
 
