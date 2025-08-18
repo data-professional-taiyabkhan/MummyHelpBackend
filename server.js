@@ -16,6 +16,7 @@ const userRoutes = require('./routes/users');
 const alertRoutes = require('./routes/alerts');
 const deviceTokenRoutes = require('./routes/device-tokens');
 const locationRoutes = require('./routes/locations');
+const voiceRoutes = require('./routes/voice');
 
 // Initialize express app
 const app = express();
@@ -90,6 +91,7 @@ app.use('/api/users', userRoutes);
 app.use('/api/alerts', alertRoutes);
 app.use('/api/device-tokens', deviceTokenRoutes);
 app.use('/api/locations', locationRoutes);
+app.use('/api/voice', voiceRoutes);
 
 // 404 handler
 app.use('*', (req, res) => {

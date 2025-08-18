@@ -23,6 +23,26 @@ services:
       retries: 3
       start_period: 40s
 
+  # Voice embedding service
+  voice-embed:
+    build: ./voice-embed
+    container_name: mummyhelp-voice-embed
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - voice-models:/app/pretrained_models
+    networks:
+      - mummyhelp-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
   # Optional: Add a reverse proxy (nginx) for production
   nginx:
     image: nginx:alpine
@@ -36,6 +56,7 @@ services:
       - ./ssl:/etc/nginx/ssl:ro
     depends_on:
       - mummyhelp-api
+      - voice-embed
     networks:
       - mummyhelp-network
 
@@ -45,3 +66,4 @@ networks:
 
 volumes:
   logs:
+  voice-models:
