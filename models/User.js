@@ -13,6 +13,11 @@ class User {
     this.pairedWith = data.paired_with;
     this.createdAt = data.created_at;
     this.lastLogin = data.last_login;
+    this.emailVerified = data.email_verified;
+    this.verificationToken = data.verification_token;
+    this.verificationTokenExpires = data.verification_token_expires;
+    this.resetToken = data.reset_token;
+    this.resetTokenExpires = data.reset_token_expires;
   }
 
   // Create a new user
@@ -21,6 +26,11 @@ class User {
       // Hash password before saving
       const salt = await bcrypt.genSalt(10);
       const hashedPassword = await bcrypt.hash(userData.password, salt);
+
+      // Generate verification token
+      const crypto = require('crypto');
+      const verificationToken = crypto.randomBytes(32).toString('hex');
+      const verificationTokenExpires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
 
       const { data, error } = await supabase
         .from('users')
@@ -32,6 +42,9 @@ class User {
           pairing_code: userData.pairingCode,
           is_paired: userData.isPaired || false,
           paired_with: userData.pairedWith,
+          email_verified: false,
+          verification_token: verificationToken,
+          verification_token_expires: verificationTokenExpires.toISOString(),
           created_at: new Date().toISOString(),
           last_login: new Date().toISOString()
         })
@@ -42,7 +55,13 @@ class User {
         throw new Error(error.message);
       }
 
-      return new User(data);
+      const user = new User(data);
+      
+      // Log verification token for development (in production, send email)
+      console.log(`Verification token for ${user.email}: ${verificationToken}`);
+      console.log(`Verification link: http://your-app-domain/verify-email?token=${verificationToken}`);
+
+      return user;
     } catch (error) {
       throw error;
     }
@@ -162,10 +181,109 @@ class User {
     this.lastLogin = new Date().toISOString();
   }
 
-  // Remove password from JSON output
+  // Set password reset token
+  async setResetToken(token, expiry) {
+    await this.update({
+      reset_token: token,
+      reset_token_expires: expiry.toISOString()
+    });
+    this.resetToken = token;
+    this.resetTokenExpires = expiry.toISOString();
+  }
+
+  // Find user by reset token
+  static async findByResetToken(token) {
+    try {
+      const { data, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('reset_token', token)
+        .gt('reset_token_expires', new Date().toISOString())
+        .single();
+
+      if (error) {
+        if (error.code === 'PGRST116') {
+          return null; // Token not found or expired
+        }
+        throw new Error(error.message);
+      }
+
+      return new User(data);
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  // Reset password and clear reset token
+  async resetPassword(newPassword) {
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(newPassword, salt);
+
+    await this.update({
+      password: hashedPassword,
+      reset_token: null,
+      reset_token_expires: null
+    });
+    
+    this.password = hashedPassword;
+    this.resetToken = null;
+    this.resetTokenExpires = null;
+  }
+
+  // Set email verification token
+  async setVerificationToken(token) {
+    await this.update({
+      verification_token: token,
+      verification_token_expires: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString() // 24 hours
+    });
+    this.verificationToken = token;
+    this.verificationTokenExpires = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+  }
+
+  // Find user by verification token
+  static async findByVerificationToken(token) {
+    try {
+      const { data, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('verification_token', token)
+        .gt('verification_token_expires', new Date().toISOString())
+        .single();
+
+      if (error) {
+        if (error.code === 'PGRST116') {
+          return null; // Token not found or expired
+        }
+        throw new Error(error.message);
+      }
+
+      return new User(data);
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  // Verify email and clear verification token
+  async verifyEmail() {
+    await this.update({
+      email_verified: true,
+      verification_token: null,
+      verification_token_expires: null
+    });
+    
+    this.emailVerified = true;
+    this.verificationToken = null;
+    this.verificationTokenExpires = null;
+  }
+
+  // Remove password and sensitive tokens from JSON output
   toJSON() {
     const user = { ...this };
     delete user.password;
+    delete user.resetToken;
+    delete user.resetTokenExpires;
+    delete user.verificationToken;
+    delete user.verificationTokenExpires;
     return user;
   }
 }
