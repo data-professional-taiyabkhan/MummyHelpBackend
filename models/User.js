@@ -57,9 +57,15 @@ class User {
 
       const user = new User(data);
       
-      // Log verification token for development (in production, send email)
-      console.log(`Verification token for ${user.email}: ${verificationToken}`);
-      console.log(`Verification link: http://your-app-domain/verify-email?token=${verificationToken}`);
+      // Send verification email
+      try {
+        const emailService = require('../services/emailService');
+        await emailService.sendVerificationEmail(user.email, verificationToken);
+        console.log(`Verification email sent to ${user.email}`);
+      } catch (emailError) {
+        console.error('Failed to send verification email during signup:', emailError);
+        // Continue anyway - don't fail signup if email fails
+      }
 
       return user;
     } catch (error) {

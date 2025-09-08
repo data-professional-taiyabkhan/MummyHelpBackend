@@ -3,6 +3,7 @@ const { body, validationResult } = require('express-validator');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const User = require('../models/User');
+const emailService = require('../services/emailService');
 
 const router = express.Router();
 
@@ -220,17 +221,23 @@ router.post('/forgot-password', forgotPasswordValidation, async (req, res) => {
     const resetToken = crypto.randomBytes(32).toString('hex');
     const resetTokenExpiry = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
 
-    // Save reset token to user (you'll need to add these fields to your User model)
+    // Save reset token to user
     await user.setResetToken(resetToken, resetTokenExpiry);
 
-    // TODO: Send email with reset link
-    // For now, just log the token (in production, send an actual email)
-    console.log(`Password reset token for ${email}: ${resetToken}`);
-    console.log(`Reset link: http://your-app-domain/reset-password?token=${resetToken}`);
+    // Send password reset email
+    try {
+      await emailService.sendPasswordResetEmail(email, resetToken);
+      console.log(`Password reset email sent to ${email}`);
+    } catch (emailError) {
+      console.error('Failed to send password reset email:', emailError);
+      // Continue anyway - don't fail the request if email fails
+    }
 
     res.json({
       success: true,
-      message: 'If an account with that email exists, a password reset link has been sent.'
+      message: 'If an account with that email exists, a password reset link has been sent.',
+      // In development, include the token for testing
+      ...(process.env.NODE_ENV !== 'production' && { developmentToken: resetToken })
     });
 
   } catch (error) {
@@ -356,14 +363,20 @@ router.post('/resend-verification', forgotPasswordValidation, async (req, res) =
     const verificationToken = crypto.randomBytes(32).toString('hex');
     await user.setVerificationToken(verificationToken);
 
-    // TODO: Send verification email
-    // For now, just log the token (in production, send an actual email)
-    console.log(`Verification token for ${email}: ${verificationToken}`);
-    console.log(`Verification link: http://your-app-domain/verify-email?token=${verificationToken}`);
+    // Send verification email
+    try {
+      await emailService.sendVerificationEmail(email, verificationToken);
+      console.log(`Verification email sent to ${email}`);
+    } catch (emailError) {
+      console.error('Failed to send verification email:', emailError);
+      // Continue anyway - don't fail the request if email fails
+    }
 
     res.json({
       success: true,
-      message: 'If an account with that email exists, a verification email has been sent.'
+      message: 'If an account with that email exists, a verification email has been sent.',
+      // In development, include the token for testing
+      ...(process.env.NODE_ENV !== 'production' && { developmentToken: verificationToken })
     });
 
   } catch (error) {
