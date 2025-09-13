@@ -194,6 +194,8 @@ router.get('/me', async (req, res) => {
 });
 
 // POST /forgot-password - Send password reset email
+// DEPRECATED: This endpoint is deprecated in favor of Supabase Auth
+// Use supabase.auth.resetPasswordForEmail() instead
 router.post('/forgot-password', forgotPasswordValidation, async (req, res) => {
   try {
     const errors = validationResult(req);
@@ -250,6 +252,8 @@ router.post('/forgot-password', forgotPasswordValidation, async (req, res) => {
 });
 
 // POST /reset-password - Reset password with token
+// DEPRECATED: This endpoint is deprecated in favor of Supabase Auth
+// Use supabase.auth.exchangeCodeForSession() and supabase.auth.updateUser() instead
 router.post('/reset-password', resetPasswordValidation, async (req, res) => {
   try {
     const errors = validationResult(req);
@@ -290,6 +294,8 @@ router.post('/reset-password', resetPasswordValidation, async (req, res) => {
 });
 
 // POST /verify-email - Verify email address
+// DEPRECATED: This endpoint is deprecated in favor of Supabase Auth
+// Use supabase.auth.exchangeCodeForSession() instead
 router.post('/verify-email', verifyEmailValidation, async (req, res) => {
   try {
     const errors = validationResult(req);
@@ -330,6 +336,8 @@ router.post('/verify-email', verifyEmailValidation, async (req, res) => {
 });
 
 // POST /resend-verification - Resend verification email
+// DEPRECATED: This endpoint is deprecated in favor of Supabase Auth
+// Use supabase.auth.resend() instead
 router.post('/resend-verification', forgotPasswordValidation, async (req, res) => {
   try {
     const errors = validationResult(req);
